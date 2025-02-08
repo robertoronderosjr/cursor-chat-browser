@@ -228,7 +228,7 @@ export default function WorkspacePage({ params }: { params: { id: string } }) {
                   content={(selectedComposer.conversation || []).map(msg => 
                     `### ${msg.type === 1 ? 'User' : 'AI'}\n\n${msg.text}`
                   ).join('\n\n')}
-                  defaultTitle={selectedComposer.text || 'Composer Log'}
+                  defaultTitle={selectedComposer.name || 'Composer Log'}
                 />
               </>
             )}
@@ -309,7 +309,7 @@ export default function WorkspacePage({ params }: { params: { id: string } }) {
             <Card className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-xl font-bold">
-                  {selectedChat?.title || selectedComposer?.text || 'Untitled'}
+                  {selectedChat?.title || selectedComposer?.name || 'Untitled'}
                 </h2>
                 <Badge variant={state.selectedType === 'chat' ? 'default' : 'secondary'}>
                   {state.selectedType === 'chat' ? 'Chat Log' : 'Composer Log'}
