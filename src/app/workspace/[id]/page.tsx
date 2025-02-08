@@ -120,7 +120,7 @@ export default function WorkspacePage({ params }: { params: { id: string } }) {
               id: selectedComposer.composerId,
               title: selectedComposer.text || 'Untitled',
               timestamp: new Date(selectedComposer.lastUpdatedAt || selectedComposer.createdAt).toISOString(),
-              bubbles: selectedComposer.conversation.map(msg => ({
+              bubbles: (selectedComposer.conversation || []).map(msg => ({
                 type: msg.type === 1 ? 'user' : 'ai',
                 text: msg.text,
                 modelType: msg.type === 2 ? 'Composer Assistant' : undefined,
@@ -140,35 +140,17 @@ export default function WorkspacePage({ params }: { params: { id: string } }) {
 
       <div className="grid grid-cols-12 gap-6">
         <div className="col-span-3 space-y-4">
-          <div className="space-y-4">
-            <h2 className="text-2xl font-bold">Chat Logs</h2>
-            <div className="space-y-2">
-              {state.tabs.map((tab) => (
-                <Button
-                  key={tab.id}
-                  variant={state.selectedId === tab.id ? "default" : "outline"}
-                  className="w-full justify-start px-4 py-3 h-auto"
-                  onClick={() => handleSelect(tab.id, 'chat')}
-                  title={tab.title}
-                >
-                  <div className="text-left w-full">
-                    <div className="font-medium truncate">
-                      {tab.title || `Chat ${tab.id.slice(0, 8)}`}
-                    </div>
-                    <div className="text-sm text-muted-foreground">
-                      {new Date(tab.timestamp).toLocaleString()}
-                    </div>
-                  </div>
-                </Button>
-              ))}
-            </div>
-          </div>
-
           {state.composers.length > 0 && (
-            <div className="space-y-4 mt-8">
+            <div className="space-y-4">
               <h2 className="text-2xl font-bold">Composer Logs</h2>
               <div className="space-y-2">
-                {state.composers.map((composer) => (
+                {state.composers
+                  .sort((a, b) => {
+                    const aTime = a.lastUpdatedAt || a.createdAt;
+                    const bTime = b.lastUpdatedAt || b.createdAt;
+                    return new Date(bTime).getTime() - new Date(aTime).getTime();
+                  })
+                  .map((composer) => (
                   <Button
                     key={composer.composerId}
                     variant={state.selectedId === composer.composerId ? "default" : "outline"}
@@ -189,6 +171,32 @@ export default function WorkspacePage({ params }: { params: { id: string } }) {
               </div>
             </div>
           )}
+
+          <div className="space-y-4">
+            <h2 className="text-2xl font-bold">Chat Logs</h2>
+            <div className="space-y-2">
+              {state.tabs
+                .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+                .map((tab) => (
+                <Button
+                  key={tab.id}
+                  variant={state.selectedId === tab.id ? "default" : "outline"}
+                  className="w-full justify-start px-4 py-3 h-auto"
+                  onClick={() => handleSelect(tab.id, 'chat')}
+                  title={tab.title}
+                >
+                  <div className="text-left w-full">
+                    <div className="font-medium truncate">
+                      {tab.title || `Chat ${tab.id.slice(0, 8)}`}
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {new Date(tab.timestamp).toLocaleString()}
+                    </div>
+                  </div>
+                </Button>
+              ))}
+            </div>
+          </div>
         </div>
 
         <div className="col-span-9">
@@ -262,7 +270,7 @@ export default function WorkspacePage({ params }: { params: { id: string } }) {
                     )}
                   </div>
                 ))}
-                {selectedComposer && selectedComposer.conversation.map((message) => (
+                {selectedComposer && (selectedComposer.conversation || []).map((message) => (
                   <div
                     key={message.bubbleId}
                     className={`p-4 rounded-lg border ${
