@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card } from "@/components/ui/card"
-import { ArrowLeft, ExternalLink } from "lucide-react"
+import { ArrowLeft, ExternalLink, Upload } from "lucide-react"
 import Link from "next/link"
 import { Loading } from "@/components/ui/loading"
 import { DownloadMenu } from "@/components/download-menu"
@@ -15,6 +15,8 @@ import { vscDarkPlus } from 'react-syntax-highlighter/dist/cjs/styles/prism'
 import { ChatTab, Workspace, ComposerChat } from "@/types/workspace"
 import { Badge } from "@/components/ui/badge"
 import { CopyButton } from "@/components/copy-button"
+import { Input } from "@/components/ui/input"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 
 interface WorkspaceState {
   workspace: Workspace | null;
@@ -23,6 +25,80 @@ interface WorkspaceState {
   selectedId: string | null;
   selectedType: 'chat' | 'composer';
   isLoading: boolean;
+}
+
+interface GistUploadButtonProps {
+  content: string;
+  defaultTitle: string;
+}
+
+function GistUploadButton({ content, defaultTitle }: GistUploadButtonProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [title, setTitle] = useState(defaultTitle);
+  const [isUploading, setIsUploading] = useState(false);
+
+  const handleUpload = async () => {
+    setIsUploading(true);
+    try {
+      const response = await fetch('/api/create-gist', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          content,
+          filename: `${title}.md`,
+        }),
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to create gist');
+      }
+
+      const data = await response.json();
+      window.open(data.url, '_blank');
+    } catch (error) {
+      console.error('Error creating gist:', error);
+    } finally {
+      setIsUploading(false);
+      setIsOpen(false);
+    }
+  };
+
+  return (
+    <>
+      <Button variant="outline" size="sm" onClick={() => setIsOpen(true)}>
+        <Upload className="w-4 h-4 mr-2" />
+        Upload to Gist
+      </Button>
+
+      <Dialog open={isOpen} onOpenChange={setIsOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Upload to GitHub Gist</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <label className="text-sm font-medium mb-2 block">
+              Gist Title
+            </label>
+            <Input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Enter gist title..."
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleUpload} disabled={isUploading}>
+              {isUploading ? 'Uploading...' : 'Upload'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
 }
 
 export default function WorkspacePage({ params }: { params: { id: string } }) {
@@ -116,17 +192,46 @@ export default function WorkspacePage({ params }: { params: { id: string } }) {
           <div className="flex gap-2">
             {selectedChat && <CopyButton tab={selectedChat} />}
             {selectedChat && <DownloadMenu tab={selectedChat} />}
-            {selectedComposer && <DownloadMenu tab={{
-              id: selectedComposer.composerId,
-              title: selectedComposer.text || 'Untitled',
-              timestamp: new Date(selectedComposer.lastUpdatedAt || selectedComposer.createdAt).toISOString(),
-              bubbles: (selectedComposer.conversation || []).map(msg => ({
-                type: msg.type === 1 ? 'user' : 'ai',
-                text: msg.text,
-                modelType: msg.type === 2 ? 'Composer Assistant' : undefined,
-                selections: msg.context?.selections || []
-              }))
-            }} />}
+            {selectedChat && (
+              <GistUploadButton
+                content={selectedChat.bubbles.map(bubble => 
+                  `### ${bubble.type === 'ai' ? `AI (${bubble.modelType})` : 'User'}\n\n${bubble.text}`
+                ).join('\n\n')}
+                defaultTitle={selectedChat.title || 'Chat Log'}
+              />
+            )}
+            {selectedComposer && (
+              <>
+                <CopyButton tab={{
+                  id: selectedComposer.composerId,
+                  title: selectedComposer.text || 'Untitled',
+                  timestamp: new Date(selectedComposer.lastUpdatedAt || selectedComposer.createdAt).toISOString(),
+                  bubbles: (selectedComposer.conversation || []).map(msg => ({
+                    type: msg.type === 1 ? 'user' : 'ai',
+                    text: msg.text,
+                    modelType: msg.type === 2 ? 'Composer Assistant' : undefined,
+                    selections: msg.context?.selections || []
+                  }))
+                }} />
+                <DownloadMenu tab={{
+                  id: selectedComposer.composerId,
+                  title: selectedComposer.text || 'Untitled',
+                  timestamp: new Date(selectedComposer.lastUpdatedAt || selectedComposer.createdAt).toISOString(),
+                  bubbles: (selectedComposer.conversation || []).map(msg => ({
+                    type: msg.type === 1 ? 'user' : 'ai',
+                    text: msg.text,
+                    modelType: msg.type === 2 ? 'Composer Assistant' : undefined,
+                    selections: msg.context?.selections || []
+                  }))
+                }} />
+                <GistUploadButton
+                  content={(selectedComposer.conversation || []).map(msg => 
+                    `### ${msg.type === 1 ? 'User' : 'AI'}\n\n${msg.text}`
+                  ).join('\n\n')}
+                  defaultTitle={selectedComposer.text || 'Composer Log'}
+                />
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -151,23 +256,23 @@ export default function WorkspacePage({ params }: { params: { id: string } }) {
                     return new Date(bTime).getTime() - new Date(aTime).getTime();
                   })
                   .map((composer) => (
-                  <Button
-                    key={composer.composerId}
-                    variant={state.selectedId === composer.composerId ? "default" : "outline"}
-                    className="w-full justify-start px-4 py-3 h-auto"
-                    onClick={() => handleSelect(composer.composerId, 'composer')}
-                    title={composer.name || 'Untitled'}
-                  >
-                    <div className="text-left w-full">
-                      <div className="font-medium truncate">
-                        {composer.name || `Composer ${composer.composerId.slice(0, 8)}`}
+                    <Button
+                      key={composer.composerId}
+                      variant={state.selectedId === composer.composerId ? "default" : "outline"}
+                      className="w-full justify-start px-4 py-3 h-auto"
+                      onClick={() => handleSelect(composer.composerId, 'composer')}
+                      title={composer.name || 'Untitled'}
+                    >
+                      <div className="text-left w-full">
+                        <div className="font-medium truncate">
+                          {composer.name || `Composer ${composer.composerId.slice(0, 8)}`}
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          {new Date(composer.lastUpdatedAt || composer.createdAt).toLocaleString()}
+                        </div>
                       </div>
-                      <div className="text-sm text-muted-foreground">
-                        {new Date(composer.lastUpdatedAt || composer.createdAt).toLocaleString()}
-                      </div>
-                    </div>
-                  </Button>
-                ))}
+                    </Button>
+                  ))}
               </div>
             </div>
           )}
@@ -178,23 +283,23 @@ export default function WorkspacePage({ params }: { params: { id: string } }) {
               {state.tabs
                 .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
                 .map((tab) => (
-                <Button
-                  key={tab.id}
-                  variant={state.selectedId === tab.id ? "default" : "outline"}
-                  className="w-full justify-start px-4 py-3 h-auto"
-                  onClick={() => handleSelect(tab.id, 'chat')}
-                  title={tab.title}
-                >
-                  <div className="text-left w-full">
-                    <div className="font-medium truncate">
-                      {tab.title || `Chat ${tab.id.slice(0, 8)}`}
+                  <Button
+                    key={tab.id}
+                    variant={state.selectedId === tab.id ? "default" : "outline"}
+                    className="w-full justify-start px-4 py-3 h-auto"
+                    onClick={() => handleSelect(tab.id, 'chat')}
+                    title={tab.title}
+                  >
+                    <div className="text-left w-full">
+                      <div className="font-medium truncate">
+                        {tab.title || `Chat ${tab.id.slice(0, 8)}`}
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        {new Date(tab.timestamp).toLocaleString()}
+                      </div>
                     </div>
-                    <div className="text-sm text-muted-foreground">
-                      {new Date(tab.timestamp).toLocaleString()}
-                    </div>
-                  </div>
-                </Button>
-              ))}
+                  </Button>
+                ))}
             </div>
           </div>
         </div>
